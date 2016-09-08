@@ -35,24 +35,23 @@ namespace TravelSort
             var result = new List<TravelCard>(cards.Count);
 
             //Опорный элемент
-            result.Add(cards.First());
+            result.Add(source.First());
+            source.RemoveAt(0);
 
-            int counter = 0;
-            while (result.Count < cards.Count && counter < cards.Count)
+            int indexR = 0, indexL = 0;
+            while (indexL != -1 || indexR != -1)
             {
-                counter++;
-
                 //Поиск связей справа
-                var indexR = source.FindIndex(x => x.From.Equals(result.Last().To));
-                if (indexR > 0)
+                indexR = source.FindIndex(x => x.From.Equals(result.Last().To));
+                if (indexR != -1)
                 {
                     result.Add(source[indexR]);
                     source.RemoveAt(indexR);
                 }
 
                 //Поиск связей cлева
-                var indexL = source.FindIndex(x => x.To.Equals(result.First().From));
-                if (indexL > 0)
+                indexL = source.FindIndex(x => x.To.Equals(result.First().From));
+                if (indexL != -1)
                 {
                     result.Insert(0, source[indexL]);
                     source.RemoveAt(indexL);
