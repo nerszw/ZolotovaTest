@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Data.Entity;
+using System.IO;
 using System.Linq;
 
 /// <summary>
@@ -7,51 +9,71 @@ using System.Linq;
 /// Мы хотим понять, через какие продукты клиенты «попадают» к нам в магазин.
 /// Напишите запрос, который выводит продукт и количество случаев, когда он был первой покупкой клиента.
 /// ----------------------------------------------------------------------------------------------------
-/// Решение написано с помошью linq, в тестовом примере аналогом базы служит коллекция элементов Sales.
+/// Решение написано с помошью linq (преобразуется в один sql запрос)
 /// </summary>
 
 namespace TradeQuery
 {
     class Program
     {
-        class Sales
+        class Sale
         {
-            public int Id;
-            public int ProductId;
-            public int CustomerId;
-            public DateTime DateCreated;
+            public int Id { get; set; }
+            public int ProductId { get; set; }
+            public int CustomerId { get; set; }
+            public DateTime DateCreated { get; set; }
+        }
+
+        class Storage : DbContext
+        {
+            public Storage() : base("Storage") { }
+            public DbSet<Sale> Sales { get; set; }
         }
 
         static void Main(string[] args)
         {
+            //Отчистка базы данных (общий сброс)
+            Database.SetInitializer<Storage>(new DropCreateDatabaseAlways<Storage>());
+
             //Исходные данные
-            var table = new List<Sales>()
+            var source = new List<Sale>()
             {
-                new Sales() { ProductId = 1, CustomerId = 1, DateCreated = new DateTime(2000, 1, 1)},
-                new Sales() { ProductId = 2, CustomerId = 1, DateCreated = new DateTime(2001, 1, 1)},
-                new Sales() { ProductId = 1, CustomerId = 1, DateCreated = new DateTime(2002, 1, 1)},
-                new Sales() { ProductId = 2, CustomerId = 2, DateCreated = new DateTime(2007, 1, 1)},
-                new Sales() { ProductId = 3, CustomerId = 2, DateCreated = new DateTime(2003, 1, 1)},
-                new Sales() { ProductId = 3, CustomerId = 2, DateCreated = new DateTime(2005, 1, 1)},
+                new Sale() { ProductId = 1, CustomerId = 1, DateCreated = new DateTime(2000, 1, 1)},
+                new Sale() { ProductId = 2, CustomerId = 1, DateCreated = new DateTime(2001, 1, 1)},
+                new Sale() { ProductId = 1, CustomerId = 1, DateCreated = new DateTime(2002, 1, 1)},
+
+                new Sale() { ProductId = 2, CustomerId = 2, DateCreated = new DateTime(2007, 1, 1)},
+                new Sale() { ProductId = 3, CustomerId = 2, DateCreated = new DateTime(2003, 1, 1)},
+                new Sale() { ProductId = 3, CustomerId = 2, DateCreated = new DateTime(2005, 1, 1)},
             };
-
-            //Первые покупки клиентов (список уникальных товаров и число первых покупок)
-            var firstProducts = table.OrderBy(x => x.DateCreated).GroupBy(x => x.CustomerId).Select(x => x.First());
-            var p1 = firstProducts.GroupBy(x => x.ProductId).Select(x => new { ProductId = x.First().ProductId, Count = x.Count() });
-
-            //Другие покупки клиентов (список уникальных товаров и число первых покупок)
-            var otherProducts = table.Where(x => !p1.Any(y => x.ProductId == y.ProductId));
-            var p2 = otherProducts.GroupBy(x => x.ProductId).Select(x => new { ProductId = x.First().ProductId, Count = 0 });
-
-            //Объединяем товары и сортируем
-            var res = p1.Union(p2).OrderBy(x => x.ProductId);
-
-            //Вывод результата
-            foreach (var x in res)
+            
+            //Открываем контекст для работы с бд
+            using (var db = new Storage())
             {
-                var msg = String.Format("ProductId: {0}, Count: {1}", x.ProductId, x.Count);
-                Console.WriteLine(msg);
+                //Инициализация данных
+                source.ForEach(x => db.Sales.Add(x));
+                db.SaveChanges();
+
+                //Первые покупки клиентов
+                var q = db.Sales.GroupBy(x => x.CustomerId).Select(x => x.OrderBy(y => y.DateCreated).FirstOrDefault());
+
+                //Товары которые хотя бы один раз были первой покупкой клиента
+                var first = q.GroupBy(x => x.ProductId).Select(x => new { ProductId = x.Key, Count = x.Count() });
+
+                //Все тавары (с нулевым счётчиком первых покупок)
+                var all = db.Sales.GroupBy(x => x.ProductId).Select(x => new { ProductId = x.Key, Count = 0 });
+
+                //Все товары с числом первых покупок 
+                var result = all.Union(first).GroupBy(x => x.ProductId).Select(x => x.OrderByDescending(y => y.Count).FirstOrDefault());
+
+                //Вывод результата
+                foreach (var x in result.OrderBy(x => x.ProductId).ToList())
+                {
+                    var msg = String.Format("ProductId: {0}, Count: {1}", x.ProductId, x.Count);
+                    Console.WriteLine(msg);
+                }
             }
+
 
             Console.ReadKey();
         }
